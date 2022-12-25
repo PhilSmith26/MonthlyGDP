@@ -1,0 +1,346 @@
+---
+title: "Producing monthly estimates of Canadian expenditure-based GDP"
+author: "Philip Smith"
+format: html
+editor: visual
+code-fold: true
+link-external-icon: true
+bibliography: https://api.citedrive.com/bib/6f4f5e09-9448-4796-b7bf-bfc0dbcffb2d/references.bib?x=eyJpZCI6ICI2ZjRmNWUwOS05NDQ4LTQ3OTYtYjdiZi1iZmMwZGJjZmZiMmQiLCAidXNlciI6ICIxMzIxIiwgInNpZ25hdHVyZSI6ICJhYWVjNDFkNmE4YzVhOWRhZjRhODczYmYxMWZkNmQyNDBkMDJlM2FiMTM5NGQxNzBmNmY2MWNlNjYzMzRkMTUzIn0=.bib
+knitr:
+  opts_chunk: 
+    collapse: true
+    comment: "#>" 
+    R.options:
+      knitr.graphics.auto_pdf: true---
+---
+
+------------------------------------------------------------------------
+
+```{=html}
+<style>
+.main-container {
+  max-width: unset;
+}
+</style>
+```
+# Introduction
+
+Estimates of expenditure-based GDP are released quarterly by Statistics Canada as part of the national accounts. These estimates are a vital report on the state of aggregate demand by each of the five institutional sectors: households, non-profit institutions serving households (NPISH), businesses, governments and non-residents. The quarterly estimates are released two months after the reference quarter and it would be beneficial if they could be published in a more timely manner. One way to address this is to interpolate and extrapolate estimates on a monthly basis, making use of several closely related monthly time series. This note describes the methodology and results of an project of this kind.
+
+# Quarterly estimates of the components of expenditure-based GDP at current prices
+
+The quarterly estimates of expenditure-based GDP are organized in four major components:
+
+-   **Final consumption expenditure by households, NPISH**[^1] and governments. Under the national accounts definitions and concepts, the business sector and the non-resident sector do not engage in final consumption expenditure.
+-   **Gross fixed capital formation by businesses, NPISH and governments**. Under the national accounts definitions and concepts, the household sector and the non-resident sector do not engage in gross fixed capital formation.
+-   **Additions to and withdrawals from inventory by businesses, NPISH and governments**. As with gross fixed capital formation, under the national accounts definitions and concepts the household sector and the non-resident sector do not engage in inventory accumulation or draw-downs.
+-   **Purchases of Canadian-produced goods and services by non-residents (exports) less purchases of goods and services by domestic institutional sectors from non-residents (imports)**.
+
+[^1]: **Non-profit institutions serving households.**
+
+In this project, the specific components of expenditure-based GDP that are listed in Table 1 are interpolated and extrapolated to produce monthly estimates that are consistent with the published quarterly estimates. There are nineteen components listed and together they add up to GDP. Some of these are interpolated and extrapolated using closely related monthly time series while others are based on autoregressive-integrated-moving-average (ARIMA) models. The table shows the relative size of each component and the modelling approach chosen for each reflects, in part, that size. Most effort is focussed on the larger components.
+
+```{r}
+#| label: Shares
+#| warning: false
+#| cache: false
+#| echo: false
+library(tidyverse)
+library(gt)
+df <- readRDS("/Users/philipsmith/Documents/R/GDP/GDP_IandE_monthly/Results_Oct_2022/GDP_C_monthly_2012_doneDec232022to102022.rds")
+df <- select(df,Date,GDP,HHFC,NPFC,GFCF,GFCO,IBRC,IBRT,IBNR,IBME,IBIP,INP,IG,VBNF,VBF,VNB,XG,XS,MG,MS,SD)
+df <- filter(df,Date>as.Date("2022-06-01"))
+df[4,1] <- as.Date("2022-7-01")
+for (i in 2:ncol(df)) {
+  df[4,i] <- 0
+  for (j in 1:3) {
+    df[4,i] <- df[4,i] + df[j,i]
+  }
+  df[4,i] <- df[4,i]/3
+}
+df[5,1] <- as.Date("2022-7-01")
+for (i in 2:ncol(df)) {
+  df[5,i] <- round(100*df[4,i]/df[4,2],1)
+}
+dftxt <- data.frame(
+  Name=c("Gross domestic product at market prices",
+    "Household final consumption expenditure",
+    "NPISH final consumption expenditure",
+    "Federal government final consumption expenditure",
+    "Non-federal government final consumption expenditure",
+    "Business residential construction investment expenditure",
+    "Business residential transfer cost investment expenditure",
+    "Business non-residential construction investment expenditure",
+    "Business machinery and equipment investment expenditure",
+    "Business intellectual property investment expenditure",
+    "NPISH investment expenditure",
+    "Government investment expenditure",
+    "Business non-farm inventory investment expenditure",
+    "Business farm inventory investment expenditure",
+    "Non-business inventory investment expenditure",
+    "Exports of goods",
+    "Exports of services",
+    "Imports of goods",
+    "Imports of services",
+    "Statistical discrepancy"
+    ),
+  Share=paste0(sprintf("%.1f",df[5,2:ncol(df)]))
+)
+gt_tbl1 <- gt(data=dftxt)
+gt_tbl1 <- gt_tbl1 %>% 
+  tab_options(table.font.size=12,container.overflow.x=FALSE,container.overflow.y=FALSE) %>%
+  tab_header(
+    title=md(html(paste0("**Table 1<br>Modelled components of gross domestic product, expenditure-based<br>Shares of GDP ",
+      "in 2022 Q3**")))
+  ) %>% 
+  cols_align(
+    align=c("left"),
+    columns=c(`Name`)
+  ) %>%
+  cols_align(
+    align=c("right"),
+    columns=c(`Share`)
+  ) %>%
+  cols_label(
+    `Name`="",
+    `Share`=md("**% share of GDP**")
+  ) %>%
+  opt_row_striping(row_striping = TRUE) %>%
+  opt_vertical_padding(scale = 0.25)
+gt_tbl1
+```
+
+## Final consumption expenditure
+
+Final consumption expenditure is by far the largest component of GDP, accounting for about three-quarters of it. Within this aggregate, about 70% is attributable to households, 2% to NPISH and the remaining 28% to governments - federal, provincial, territorial, municipal and aboriginal combined.
+
+A monthly interpolation and extrapolation model is already available for the household sector[^2] and will not be further discussed in this paper. This author knows of no appropriate monthly related series for NPISH final consumption expenditure, but the quarterly series in the national accounts is fairly stable so the corresponding interpolated monthly series can be estimated reasonably well without any related series using the Denton-Dagum-Cholette [@Denton1971Adjustment:20bf] [@Dagum2006Benchmarking:65f8] method. Note that when this approach is used for interpolation, for any national accounts component, the resulting monthly series will look comparatively smooth, since it contains no specific information about the month-to-month variations. It can be extrapolated forward with an ARIMA model, although this will reflect the smooth monthly time series from which it is derived. The remaining challenge is the government final expenditure component. The main element, by far, within government final consumption expenditures, both federal and provincial-territorial-municipal-aboriginal, is labour income paid to civil servants. Government payroll statistics are available on a monthly basis in the survey of employment, payrolls and hours (table 14-10-0221-01), so this third component of final consumption expenditure can be readily interpolated and extrapolated, although this assumes the non-labour purchases of goods and services by governments - about a fifth of the total - are roughly proportional to the labour component. The model can perhaps be improved in future by finding and adopting additional monthly data sources such as, in the federal government case, Finance Canada's *Fiscal Monitor*.
+
+[^2]: [Methodology note here](https://rpubs.com/PhilSmith26/941490)
+
+## Gross fixed capital formation
+
+Gross fixed capital formation, or more simply "investment", presently accounts for about a quarter of GDP, although its share can vary considerably over the business cycle. It has three main components: (i) construction, both residential and non-residential, (ii) machinery and equipment purchases and (iii) intellectual property products.
+
+For construction investment, Statistics Canada releases monthly estimates of building construction spending, both residential and non-residential (table 34-10-0175-01). These data are well suited for interpolating and extrapolating the corresponding quarterly national accounts components. However, within the national accounts residential construction investment concept there is also the "transfer costs" sub-component, including real estate commissions, lawyers' fees and other such costs which are not covered in the monthly building construction time series. Transfer costs can be interpolated and extrapolated using the monthly Canadian Real Estate Association's real estate sales statistics, since real estate commissions, the largest part of transfer costs, are roughly proportional to real estate sales. However, this is a simplification that could be addressed again in future if additional monthly indicators can be found.
+
+Business investment in machinery and equipment is essentially spending on domestically-produced and imported products of this kind. This quarterly spending can be interpolated and extrapolated using domestic manufacturing shipments of such products, obtained from the monthly survey of manufacturing (16-10-0047-01), and imports of these goods as reported in Statistics Canada's monthly international trade statistics (12-10-0119-01).
+
+Investment spending on intellectual property products is the smallest of the gross fixed capital formation components, accounting for about 10% of total business investment outlays. No suitable monthly time series are readily available for use in interpolating and extrapolating this quarterly national accounts time series insofar as the author is aware, so the aforementioned Denton-Dagum-Cholette method is used for interpolation and an ARIMA model for extrapolation. Likewise, this approach is also adopted for investment spending by governments and the NPISH sector.
+
+## Additions to and withdrawals from inventory
+
+Changes in inventories are a volatile component of GDP. The non-farm business sector component, by far the most important, is interpolated and extrapolated using data on changes in inventories reported by the monthly survey of manufacturing (16-10-0047-01) and the wholesale trade survey (20-10-0076-01). Changes in farm, government and NPISH inventories are dealt with via the Denton-Dagum-Cholette and ARIMA methods, although an indicator-based approach for the change in farm inventories might also be investigated in future.
+
+## International trade in goods and services
+
+Exports and imports of goods and services are straightforward in this project because Statistics Canada publishes the national-accounts-concept estimates monthly. Statistics Canada tables 12-10-0119-01 and 12-10-0144-01 provide the monthly indicators used to interpolate and extrapolate in this case.
+
+## Statistical discrepancy
+
+The quarterly national accounts estimates of GDP include half of the discrepancy between the initial income-based and expenditure-based estimates of GDP, in order to balance the two accounts. The discrepancy should be zero in principle, but it is not in practice due to measurement errors. The historical time series for the discrepancy shows it to be small and volatile, fluctuating between positive and negative. There is no suitable related monthly series with which to interpolate and extrapolate the discrepancy, so once again the Denton-Dagum-Cholette method is used for interpolation and an ARIMA model for extrapolation.
+
+## Model results
+
+Table 2 summarizes the results for the statistical models linking the quarterly components of GDP at current prices to their corresponding monthly indicators. They are log-linear models with an autoregressive error term.
+
+```{r}
+#| label: RegResults
+#| warning: false
+#| cache: false
+#| echo: false
+library(tidyverse)
+library(gt)
+REGRESpub <- readRDS(paste0("/Users/philipsmith/Documents/R/GDP/GDP_IandE_monthly/Results_Oct_2022/RegResults/REGRESpub.rds"))
+REGRESpub <- mutate(REGRESpub,across(2:6,as.numeric))
+gt_tbl1 <- gt(data=REGRESpub)
+gt_tbl1 <- gt_tbl1 %>% 
+  tab_options(table.font.size=10,container.width = 750) %>%
+  tab_header(
+    title=md(html(paste0("**Table 2<br>GDP expenditure-based at current prices: model results<br>",
+      "Estimation period 2012 Q1 to 2022 Q3, seasonally adjusted**")))
+  ) %>% 
+  tab_source_note(
+    source_note=md(html("@PhilSmith26"))
+  ) %>% 
+  cols_align(
+    align=c("left"),
+    columns=c(`Name`)
+  ) %>%
+  fmt_number(
+    columns=c(3,5),
+    decimals=0,
+    use_seps=TRUE
+  ) %>%
+  fmt_number(
+    columns=c(2,4,6),
+    decimals=3,
+    use_seps=FALSE
+  ) %>%
+  cols_label(
+    `Name`="",
+    `ARSQ`=   md("**ARSQ**"),
+    `SIGMA`=  md("**SIGMA**"),
+    `RHO`=    md("**RHO**"),
+    `MEAN`=   md("**MEAN**"),
+    `SEE`=    md("**COV**"),
+    `DRIVER1`=md("**X1**"),
+    `DRIVER2`=md("**X2**")
+  ) %>%
+  sub_missing(columns=8,rows=1:11,missing_text="---"
+  ) %>%
+  tab_footnote(
+    footnote = paste0("ARSQ is the adjusted R-squared. SIGMA is the ",
+       "estimated standard deviation of the error term. RHO is the ",
+       "estimated autoregressive error parameter. MEAN is the average ",
+       "value of the dependent variable over the sample period. ",
+       "COV is the coefficient of variation, equal to SIGMA divided ",
+       "by MEAN times 100. X1 and X2 is/are the source(s) for the ",
+       "explanatory variable(s). RTS stands for retail trade survey, ",
+       "CPI for consumer price index survey, GDP for monthly real ",
+       "gross domestic product estimates, FSDP for the food services ",
+       "and drinking places survey, and ITERC for the international ",
+       "travellers entering or returning to Canada survey. ",
+       "Estimates derived using time disaggregation methods ",
+       "credited to G.C. Chow and A.-L. Lin, and data from Statistics ",
+       "Canada tables 36-10-0107-01, 20-10-0008-01, 18-10-0004-01, ",
+       "36-10-0434-01, 21-10-0019-01 and 24-10-0054-01. ",Sys.time()),
+    locations = cells_title()
+  )
+gt_tbl1 <- opt_row_striping(gt_tbl1, row_striping = TRUE)
+gt_tbl1 <- opt_vertical_padding(gt_tbl1, scale = 0.25)
+gt_tbl1
+```
+
+The coefficients of variation indicate that the models for non-federal governments' final consumption expenditure, construction and especially international trade work quite well. Those for federal government consumption expenditure, ownership transfer costs and machinery and equipment investment have higher coefficients of variation and must be considered less reliable. The model for the change in non-farm business inventories, with an adjusted R-squared of just 0.085 and a standard deviation of almost \$9 billion (seasonally adjusted at annual rates) is perhaps as good as might be expected. There may be scope to improve these model results, but it will depend mostly on finding better or additional related indicators.
+
+# Quarterly estimates of the components of expenditure-based GDP at constant 2012 prices
+
+The model adopted here to estimate monthly expenditure-based GDP also includes estimates of GDP and its components at constant 2012 prices, together with the implicit Paasche price indexes. It would be preferable, in some ways, to produce the volume estimates using the chained Fisher indexation method, but that would not work well in this context because the estimates would not be additive.
+
+Three different approaches are taken to interpolate and extrapolate the quarterly volume estimates. First, some of the monthly volume estimates are calculated directly using related volume-type monthly series, with the associated price indexes calculated indirectly as the ratio of the estimates at current prices to those at constant prices. These results are shown in Table 2 below. Second, in some cases where suitable monthly related series are unavailable the quarterly price indexes are interpolated and extrapolated using the Denton-Dagum-Cholette method and ARIMA models and the monthly volume estimates are then calculated indirectly by deflation. GDP volume components done this way include final consumption spending of NPISH units, business residential transfer cost expenditures, business investment in intellectual property, and investment expenditure by NPISH and government units. Finally, in some cases the quarterly volume estimates are interpolated and extrapolated directly via the Denton-Dagum-Cholette method and ARIMA models, with the monthly price indexes calculated indirectly. Cases done this way include the change in farm and in non-business inventories, exports and imports of services and the statistical discrepancy.
+
+Table 3 summarizes the results for the statistical models linking the quarterly components of GDP at constant 2012 prices to their corresponding monthly related indicators. They are log-linear models with an autoregressive error term.
+
+```{r}
+#| label: KRegResults
+#| warning: false
+#| cache: false
+#| echo: false
+library(tidyverse)
+library(gt)
+REGRESpub <- readRDS(paste0("/Users/philipsmith/Documents/R/GDP/GDP_IandE_monthly/Results_Oct_2022/RegResults/KREGRESpub.rds"))
+REGRESpub <- mutate(REGRESpub,across(2:6,as.numeric))
+gt_tbl1 <- gt(data=REGRESpub)
+gt_tbl1 <- gt_tbl1 %>% 
+  tab_options(table.font.size=10,container.width = 750) %>%
+  tab_header(
+    title=md(html(paste0("**Table 3<br>GDP expenditure-based at constant 2012 prices: model results<br>",
+      "Estimation period 2012 Q1 to 2022 Q3, seasonally adjusted**")))
+  ) %>% 
+  tab_source_note(
+    source_note=md(html("@PhilSmith26"))
+  ) %>% 
+  cols_align(
+    align=c("left"),
+    columns=c(`Name`)
+  ) %>%
+  fmt_number(
+    columns=c(3,5),
+    decimals=0,
+    use_seps=TRUE
+  ) %>%
+  fmt_number(
+    columns=c(2,4,6),
+    decimals=3,
+    use_seps=FALSE
+  ) %>%
+  cols_label(
+    `Name`="",
+    `ARSQ`=   md("**ARSQ**"),
+    `SIGMA`=  md("**SIGMA**"),
+    `RHO`=    md("**RHO**"),
+    `MEAN`=   md("**MEAN**"),
+    `SEE`=    md("**COV**"),
+    `DRIVER1`=md("**X1**"),
+    `DRIVER2`=md("**X2**")
+  ) %>%
+  sub_missing(columns=8,rows=1:8,missing_text="---"
+  ) %>%
+  tab_footnote(
+    footnote = paste0("ARSQ is the adjusted R-squared. SIGMA is the ",
+       "estimated standard deviation of the error term. RHO is the ",
+       "estimated autoregressive error parameter. MEAN is the average ",
+       "value of the dependent variable over the sample period. ",
+       "COV is the coefficient of variation, equal to SIGMA divided ",
+       "by MEAN times 100. X1 and X2 is/are the source(s) for the ",
+       "explanatory variable(s). RTS stands for retail trade survey, ",
+       "CPI for consumer price index survey, GDP for monthly real ",
+       "gross domestic product estimates, FSDP for the food services ",
+       "and drinking places survey, and ITERC for the international ",
+       "travellers entering or returning to Canada survey. ",
+       "Estimates derived using time disaggregation methods ",
+       "credited to G.C. Chow and A.-L. Lin, and data from Statistics ",
+       "Canada tables 36-10-0107-01, 20-10-0008-01, 18-10-0004-01, ",
+       "36-10-0434-01, 21-10-0019-01 and 24-10-0054-01. ",Sys.time()),
+    locations = cells_title()
+  )
+gt_tbl1 <- opt_row_striping(gt_tbl1, row_striping = TRUE)
+gt_tbl1 <- opt_vertical_padding(gt_tbl1, scale = 0.25)
+gt_tbl1
+```
+
+The results look fairly good, although there is certainly room for improvement. The model for the volume of federal government final consumption expenditure has a coefficient of variation much larger (2.5%) than its counterpart for non-federal expenditure (0.7%), possibly since the relative importance of non-wage spending on goods and services is greater federally. As noted, perhaps data from Finance Canada's *Fiscal Monitor* could be used to improve this model. The models for interpolating and extrapolating business investment and exports and imports of goods seem fine. The volume of non-farm business inventory change also seems tolerably well modelled, although the volatility of this component is inevitably challenging.
+
+Chart 1 compares the monthly estimates of income-based GDP at constant prices to real industry based GDP, the latter published by Statistics Canada in table v65201210. To make the data comparable, both are scaled to equal 100 in January 2012. The trends and cycles of the two series are essentially the same, but the month-to-month changes are quite different. This is to be expected. Even if, hypothetically, there were no data inaccuracies in the measurement of monthly real industry-based GDP and quarterly expenditure-based GDP, and even if, again hypothetically, the monthly interpolation of the latter was done without error, the two would still be different because the indexation methods vary. A chained Fisher index of real value added by industry, with a Laspeyres tail, inevitably differs from a fixed-weight index of expenditure volume components.
+
+```{r}
+#| label: KGDPIBvsKGDPINDBResults
+#| warning: false
+#| cache: false
+#| echo: false
+library(tidyverse)
+library(gt)
+library(cansim)
+IDX <- function(x) {y <- 100*x/x[1]}
+GDPbyInd <- get_cansim_vector("v65201210")
+GDPbyInd <- filter(GDPbyInd,Date>=as.Date("2012-01-01"))
+K <- readRDS("/Users/philipsmith/Documents/R/GDP/GDP_IandE_monthly/Results_Oct_2022/GDP_K_monthly_2012_doneDec232022to102022.rds")
+df <- data.frame(Date=as.Date(K$Date),GDP=K$GDP,GDPbyInd=GDPbyInd$VALUE)
+df$GDPbyInd <- as.numeric(df$GDPbyInd)
+c2 <- ggplot(df)+
+  geom_line(aes(x=Date,y=IDX(GDP)),colour="red",size=1.5)+
+  geom_line(aes(x=Date,y=IDX(GDPbyInd)),colour="blue",size=1.5)+
+  labs(title=paste0("Chart 1\nReal gross domestic product, January 2012 to September 2022"),
+    subtitle=paste0("The red line is monthly expenditure-based GDP at constant 2012 prices\n",
+      "The blue line is Statistics Canada's monthly real industry-based GDP"),
+    caption=paste0("Own calculations using Statistics Canada data. @PhilSmith26"),x="") +
+  scale_x_continuous(breaks=c(seq.Date(as.Date("2012-01-01"),
+    as.Date("2022-09-01"),by="year")),labels=
+    c("Jan\n2012","Jan\n2013","Jan\n2014","Jan\n2015","Jan\n2016","Jan\n2017","Jan\n2018",
+      "Jan\n2019","Jan\n2020","Jan\n2021","Jan\n2022"))+
+    scale_y_continuous(
+      position="right",
+      name="Indexes, January 2012 = 100\n")+
+  theme(plot.title = element_text(size=16,face="bold")) +
+  theme(plot.caption = element_text(hjust=0)) +
+  theme(panel.background = element_rect(fill="aliceblue",colour="black")) +
+  theme(panel.border = element_rect(fill=NA,colour="black"))+
+  theme(panel.grid.minor=element_line(colour="lightgrey",size=0.5)) +
+  theme(panel.grid.major=element_line(colour="grey",size=0.5)) +
+  theme(axis.text.x = element_text(angle=0,hjust=1,size=9)) +
+  theme(axis.text.y = element_text(size=12))
+c2
+```
+
+# Software
+
+Proceeding as described above to estimate monthly HFCE time series using related series was done using the R programming language in the RStudio environment, along with the 'tempdisagg' package. The latter is a set of R functions implemented by Christoph Sax and Peter Steiner[@Sax2013Temporal:d424]. It is a very flexible package with a wide range of options for different methods of temporal disaggregation.
+
+The source code for this project is freely available [on GitHub.](https://github.com/PhilSmith26/MonthlyGDP)
+
+RStudio's recently implemented and highly recommended quarto package was used to write and publish this documentation to the Internet.
+
+# Conclusions
+
+The project described above yields monthly interpolations and extrapolations of the 19 expenditure-based GDP aggregates in Table 1 that together exhaust GDP. The estimates are all seasonally adjusted at annual rates and they are available at current prices, at constant 2012 prices and as implicit Paasche price indexes. Applying identities, they can be used as well to compute aggregates such as final domestic demand, final consumption expenditure, gross fixed capital formation and the trade balance. The detailed statistical results from this project can be found [on the Internet](https://www.philipsmith.ca/GDP_monthly/). They are visible there in charts and tables and can be downloaded in spreadsheets.
