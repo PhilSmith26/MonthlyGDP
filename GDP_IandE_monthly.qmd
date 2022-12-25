@@ -335,7 +335,7 @@ c2
 
 # Software
 
-Proceeding as described above to estimate monthly HFCE time series using related series was done using the R programming language in the RStudio environment, along with the 'tempdisagg' package. The latter is a set of R functions implemented by Christoph Sax and Peter Steiner[@Sax2013Temporal:d424]. It is a very flexible package with a wide range of options for different methods of temporal disaggregation.
+Proceeding as described above to estimate monthly GDP time series using related series was done using the R programming language in the RStudio environment, along with the 'tempdisagg' package. The latter is a set of R functions implemented by Christoph Sax and Peter Steiner[@Sax2013Temporal:d424]. It is a very flexible package with a wide range of options for different methods of temporal disaggregation.
 
 The source code for this project is freely available [on GitHub.](https://github.com/PhilSmith26/MonthlyGDP)
 
